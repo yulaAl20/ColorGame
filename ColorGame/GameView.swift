@@ -3,7 +3,7 @@
 //  ColorGame
 //
 //  Created by cobsccomp242p-066 on 2026-01-12.
-//import SwiftUI
+//
 import SwiftUI
 
 struct GameView: View {
@@ -20,7 +20,27 @@ struct GameView: View {
 
             VStack {
                 header
-                grid
+                gameArea
+            }
+
+            if engine.isInvalidSelection {
+                Text("Tiles must be the same color!")
+                    .padding()
+                    .background(Color.red.opacity(0.9))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+            }
+
+            if engine.lastScoreGained > 0 {
+                Text("+\(engine.lastScoreGained)")
+                    .font(.title.bold())
+                    .foregroundColor(.green)
+                    .offset(y: -120)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            engine.lastScoreGained = 0
+                        }
+                    }
             }
         }
         .navigationBarHidden(true)
@@ -47,23 +67,53 @@ struct GameView: View {
         .padding()
     }
 
-    private var grid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: engine.size)
+    private var gameArea: some View {
+        let columns = Array(
+            repeating: GridItem(.flexible(), spacing: 4),
+            count: engine.size
+        )
 
-        return LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(engine.grid.flatMap { $0 }) { tile in
-                TileView(
-                    tile: tile,
-                    isSelected: engine.selectedTile?.id == tile.id
-                )
-                .onTapGesture {
-                    engine.select(tile: tile)
+        return ZStack {
+            Canvas { context, size in
+                guard engine.selectedTiles.count > 1 else { return }
+
+                var path = Path()
+                let tileSize = size.width / CGFloat(engine.size)
+
+                for (i, tile) in engine.selectedTiles.enumerated() {
+                    let x = CGFloat(tile.col) * tileSize + tileSize / 2
+                    let y = CGFloat(tile.row) * tileSize + tileSize / 2
+
+                    if i == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+
+                context.stroke(path, with: .color(.white), lineWidth: 4)
+            }
+
+            LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(engine.grid.flatMap { $0 }) { tile in
+                    TileView(
+                        tile: tile,
+                        isSelected: engine.selectedTiles.contains(tile)
+                    )
+                    .onTapGesture {
+                        engine.select(tile: tile)
+                    }
                 }
             }
         }
         .padding()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            engine.completeMatch()
+        }
     }
 }
+
 struct TileView: View {
     let tile: Tile
     let isSelected: Bool
@@ -74,51 +124,7 @@ struct TileView: View {
             .aspectRatio(1, contentMode: .fit)
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? .white : .clear, lineWidth: 3)
+                    .stroke(.white, lineWidth: isSelected ? 3 : 1)
             }
-            .animation(.easeInOut, value: isSelected)
     }
 }
-
-#Preview {
-    ZStack {
-        Color.primaryBackground
-        TileView(
-            tile: Tile(color: .purple, row: 0, col: 0),
-            isSelected: true
-        )
-        .frame(width: 60)
-    }
-    .preferredColorScheme(.dark)
-}
-struct DifficultyButton: View {
-    let difficulty: Difficulty
-
-    var body: some View {
-        HStack {
-            Text(difficulty.rawValue)
-                .font(.title3.bold())
-
-            Spacer()
-
-            Text("\(difficulty.gridSize) × \(difficulty.gridSize)")
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.08))
-        )
-        .foregroundColor(.white)
-    }
-}
-
-#Preview {
-    ZStack {
-        Color.primaryBackground
-        DifficultyButton(difficulty: .medium)
-            .padding()
-    }
-    .preferredColorScheme(.dark)
-}
-
